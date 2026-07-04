@@ -1,0 +1,53 @@
+# yaml-language-server: $schema=https://taskfile.dev/schema.json
+version: "3"
+
+vars:
+  BIN_NAME: secrets-syncer
+  VERSION:
+    sh: git describe --tags --dirty --always 2>/dev/null || echo 0.1.0-dev
+  GOOS:
+    sh: go env GOOS
+  GOARCH:
+    sh: go env GOARCH
+  GOHOST: "GOOS={{.GOOS}} GOARCH={{.GOARCH}} go"
+  CGO: "CGO_ENABLED=0"
+  LDFLAGS: "-s -w -X github.com/jkarkoszka/secrets-syncer/internal/cli.Version={{.VERSION}}"
+
+tasks:
+  build:
+    desc: Build the binary into ./bin
+    deps: [test]
+    cmds:
+      - mkdir -p ./bin
+      - "{{.CGO}} {{.GOHOST}} build -a -ldflags='{{.LDFLAGS}}' -o ./bin/{{.BIN_NAME}} ./cmd/secrets-syncer"
+
+  clean:
+    desc: Clean local build artifacts
+    cmds:
+      - rm -rf ./bin/
+
+  default:
+    desc: List available tasks
+    cmds:
+      - task --list-all
+
+  lint:
+    desc: Run golangci-lint
+    cmds:
+      - golangci-lint run --config .golangci.yml --timeout 5m
+
+  test:
+    desc: Run unit tests
+    cmds:
+      - go test ./...
+
+  test-verbose:
+    desc: Run unit tests verbosely
+    cmds:
+      - go test -v ./...
+
+  update:
+    desc: Update Go modules
+    cmds:
+      - go get -u ./...
+      - go mod tidy
