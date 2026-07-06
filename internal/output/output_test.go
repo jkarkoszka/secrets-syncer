@@ -23,7 +23,7 @@ func TestWritePlanSummary(t *testing.T) {
 		Stats: planner.Stats{Add: 1, Change: 1},
 	}
 
-	if err := formatter.WritePlan(plan); err != nil {
+	if err := formatter.WritePlan(plan, output.Scope{}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -50,7 +50,7 @@ func TestWritePlanNoChanges(t *testing.T) {
 	formatter := output.NewFormatterWithWriter(&buf)
 	plan := &planner.Plan{}
 
-	if err := formatter.WritePlan(plan); err != nil {
+	if err := formatter.WritePlan(plan, output.Scope{}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -73,7 +73,7 @@ func TestWriteConflict(t *testing.T) {
 		}},
 	}
 
-	if err := formatter.WritePlan(plan); err != nil {
+	if err := formatter.WritePlan(plan, output.Scope{}); err != nil {
 		t.Fatal(err)
 	}
 

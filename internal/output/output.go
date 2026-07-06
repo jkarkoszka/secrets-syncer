@@ -57,7 +57,8 @@ func init() {
 }
 
 // WritePlan renders a plan summary.
-func (f *Formatter) WritePlan(plan *planner.Plan) error {
+func (f *Formatter) WritePlan(plan *planner.Plan, scope Scope) error {
+	f.writeScope(scope)
 	if plan.HasChanges() {
 		fmt.Fprintln(f.w, "Secrets Syncer will perform the following actions:")
 		fmt.Fprintln(f.w)
@@ -67,6 +68,7 @@ func (f *Formatter) WritePlan(plan *planner.Plan) error {
 				fmt.Fprintf(f.w, "  %s create %s\n", createColor("+"), action.Key)
 			case planner.ActionUpdate:
 				fmt.Fprintf(f.w, "  %s update %s\n", updateColor("~"), action.Key)
+				f.writeUpdateDetails(action)
 			case planner.ActionDelete:
 				fmt.Fprintf(f.w, "  %s destroy %s\n", deleteColor("-"), action.Key)
 			}
@@ -97,6 +99,89 @@ func (f *Formatter) writeConflict(conflict planner.Conflict) error {
 	fmt.Fprintln(f.w, "This secret will not be modified.")
 	fmt.Fprintln(f.w)
 	return nil
+}
+
+// Scope describes the runtime context for plan/apply.
+type Scope struct {
+	Provider     string
+	Region       string
+	AccountID    string
+	AccountAlias string
+	AccountNote  string
+	Profile      string
+	RoleARN      string
+}
+
+func (s Scope) hasInfo() bool {
+	return s.Provider != "" || s.Region != "" || s.AccountID != "" || s.AccountAlias != "" || s.Profile != "" || s.RoleARN != ""
+}
+
+func (f *Formatter) writeScope(scope Scope) {
+	if !scope.hasInfo() {
+		return
+	}
+
+	fmt.Fprintln(f.w, "Scope:")
+	if scope.Provider != "" {
+		fmt.Fprintf(f.w, "  Provider: %s\n", scope.Provider)
+	}
+	if scope.Region != "" {
+		fmt.Fprintf(f.w, "  Region: %s\n", scope.Region)
+	}
+	if scope.AccountID != "" {
+		accountLine := scope.AccountID
+		if scope.AccountAlias != "" {
+			accountLine = fmt.Sprintf("%s (%s)", scope.AccountID, scope.AccountAlias)
+		}
+		if scope.AccountNote != "" {
+			accountLine = fmt.Sprintf("%s (%s)", accountLine, scope.AccountNote)
+		}
+		fmt.Fprintf(f.w, "  Account: %s\n", accountLine)
+	}
+	if scope.Profile != "" {
+		fmt.Fprintf(f.w, "  Profile: %s\n", scope.Profile)
+	}
+	if scope.RoleARN != "" {
+		fmt.Fprintf(f.w, "  Role: %s\n", scope.RoleARN)
+	}
+	fmt.Fprintln(f.w)
+}
+
+func (f *Formatter) writeUpdateDetails(action planner.Action) {
+	if action.Changes == nil || !action.Changes.HasChanges() {
+		return
+	}
+
+	if action.Changes.Value {
+		fmt.Fprintln(f.w, "    value: (sensitive)")
+	}
+	if action.Changes.Description {
+		fmt.Fprintf(f.w, "    description: %s -> %s\n",
+			formatOptional(action.Changes.DescriptionOld),
+			formatOptional(action.Changes.DescriptionNew))
+	}
+	if action.Changes.EncryptionKey {
+		fmt.Fprintf(f.w, "    encryption_key: %s -> %s\n",
+			formatOptional(action.Changes.EncryptionKeyOld),
+			formatOptional(action.Changes.EncryptionKeyNew))
+	}
+	for _, tagChange := range action.Changes.Tags {
+		switch tagChange.Type {
+		case planner.TagAdded:
+			fmt.Fprintf(f.w, "    tag + %s=%s\n", tagChange.Key, tagChange.NewValue)
+		case planner.TagUpdated:
+			fmt.Fprintf(f.w, "    tag ~ %s: %s -> %s\n", tagChange.Key, tagChange.OldValue, tagChange.NewValue)
+		case planner.TagRemoved:
+			fmt.Fprintf(f.w, "    tag - %s\n", tagChange.Key)
+		}
+	}
+}
+
+func formatOptional(value string) string {
+	if value == "" {
+		return "<empty>"
+	}
+	return value
 }
 
 // WriteApplyComplete renders the apply summary line.

@@ -25,11 +25,13 @@ import (
 var (
 	runConfig config.RunConfig
 
-	providerFactory = defaultProviderFactory
-	decryptor       sops.Decryptor = sops.NewCLIDecryptor()
-	stdinReader     io.Reader      = os.Stdin
-	openTTY         = os.Open
+	providerFactory providerFactoryFunc = defaultProviderFactory
+	decryptor       sops.Decryptor      = sops.NewCLIDecryptor()
+	stdinReader     io.Reader           = os.Stdin
+	openTTY                             = os.Open
 )
+
+type providerFactoryFunc func(context.Context, config.RunConfig) (provider.SecretProvider, *auth.Identity, error)
 
 // Execute runs the CLI.
 func Execute() error {
@@ -99,12 +101,18 @@ var planCmd = &cobra.Command{
 			return err
 		}
 
-		plan, err := buildPlan(cmd.Context(), doc)
+		prov, identity, err := providerFactory(cmd.Context(), runConfig)
 		if err != nil {
 			return err
 		}
 
-		if err := output.NewFormatter().WritePlan(plan); err != nil {
+		plan, err := buildPlan(cmd.Context(), doc, prov)
+		if err != nil {
+			return err
+		}
+
+		scope := buildScope(doc.Provider, identity)
+		if err := output.NewFormatter().WritePlan(plan, scope); err != nil {
 			return err
 		}
 		if plan.HasConflicts() {
@@ -126,13 +134,19 @@ var applyCmd = &cobra.Command{
 			return err
 		}
 
-		plan, err := buildPlan(cmd.Context(), doc)
+		prov, identity, err := providerFactory(cmd.Context(), runConfig)
+		if err != nil {
+			return err
+		}
+
+		plan, err := buildPlan(cmd.Context(), doc, prov)
 		if err != nil {
 			return err
 		}
 
 		formatter := output.NewFormatter()
-		if err := formatter.WritePlan(plan); err != nil {
+		scope := buildScope(doc.Provider, identity)
+		if err := formatter.WritePlan(plan, scope); err != nil {
 			return err
 		}
 		if plan.HasConflicts() {
@@ -155,11 +169,6 @@ var applyCmd = &cobra.Command{
 			if !approved {
 				return fmt.Errorf("apply cancelled")
 			}
-		}
-
-		prov, err := providerFactory(cmd.Context(), runConfig)
-		if err != nil {
-			return err
 		}
 
 		stats, err := planner.Apply(cmd.Context(), prov, plan)
@@ -213,13 +222,8 @@ func readInputBytes(ctx context.Context) ([]byte, error) {
 	return input.ReadBytes(runConfig.InputPath)
 }
 
-func buildPlan(ctx context.Context, doc *input.Document) (*planner.Plan, error) {
+func buildPlan(ctx context.Context, doc *input.Document, prov provider.SecretProvider) (*planner.Plan, error) {
 	if err := input.Validate(doc); err != nil {
-		return nil, err
-	}
-
-	prov, err := providerFactory(ctx, runConfig)
-	if err != nil {
 		return nil, err
 	}
 
@@ -227,22 +231,47 @@ func buildPlan(ctx context.Context, doc *input.Document) (*planner.Plan, error) 
 	return planner.Generate(ctx, prov, desired, planner.Options{Prune: runConfig.Prune})
 }
 
-func defaultProviderFactory(ctx context.Context, cfg config.RunConfig) (provider.SecretProvider, error) {
+func defaultProviderFactory(ctx context.Context, cfg config.RunConfig) (provider.SecretProvider, *auth.Identity, error) {
 	awsCfg, err := auth.LoadConfig(ctx, auth.Options{
 		Region:  cfg.Region,
 		Profile: cfg.Profile,
 		RoleARN: cfg.RoleARN,
 	})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if err := auth.ValidateAccountID(ctx, awsCfg, cfg.AccountID); err != nil {
-		return nil, err
+		return nil, nil, err
+	}
+	identity := &auth.Identity{Region: awsCfg.Region}
+	if resolved, err := auth.ResolveIdentity(ctx, awsCfg); err == nil {
+		identity = &resolved
 	}
 
 	sm := secretsmanager.NewFromConfig(awsCfg)
 	tags := resourcegroupstaggingapi.NewFromConfig(awsCfg)
-	return awssecretsmanager.New(sm, tags), nil
+	return awssecretsmanager.New(sm, tags), identity, nil
+}
+
+func buildScope(providerName string, identity *auth.Identity) output.Scope {
+	scope := output.Scope{
+		Provider: providerName,
+		Profile:  runConfig.Profile,
+		RoleARN:  runConfig.RoleARN,
+	}
+	if identity != nil {
+		scope.Region = identity.Region
+		scope.AccountID = identity.AccountID
+		scope.AccountAlias = identity.AccountAlias
+	}
+	if scope.AccountID == "" && runConfig.AccountID != "" {
+		scope.AccountID = runConfig.AccountID
+		scope.AccountNote = "expected"
+	}
+	if scope.Region == "" {
+		scope.Region = runConfig.Region
+	}
+	return scope
 }
 
 func confirmationReader() (io.Reader, func(), error) {
@@ -271,7 +300,7 @@ func confirmApply(r io.Reader) (bool, error) {
 }
 
 // SetProviderFactory overrides provider creation for tests.
-func SetProviderFactory(factory func(context.Context, config.RunConfig) (provider.SecretProvider, error)) {
+func SetProviderFactory(factory func(context.Context, config.RunConfig) (provider.SecretProvider, *auth.Identity, error)) {
 	providerFactory = factory
 }
 

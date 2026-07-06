@@ -10,6 +10,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/credentials/stscreds"
+	"github.com/aws/aws-sdk-go-v2/service/iam"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 )
 
@@ -18,6 +19,13 @@ type Options struct {
 	Region  string
 	Profile string
 	RoleARN string
+}
+
+// Identity describes the resolved AWS identity.
+type Identity struct {
+	AccountID    string
+	AccountAlias string
+	Region       string
 }
 
 // LoadConfig resolves AWS credentials and returns an aws.Config.
@@ -193,4 +201,24 @@ func ValidateAccountID(ctx context.Context, cfg aws.Config, expectedAccountID st
 		return fmt.Errorf("account mismatch: expected %s, got %s", expectedAccountID, actual)
 	}
 	return nil
+}
+
+// ResolveIdentity resolves account metadata for logging.
+func ResolveIdentity(ctx context.Context, cfg aws.Config) (Identity, error) {
+	identity := Identity{Region: cfg.Region}
+
+	stsClient := sts.NewFromConfig(cfg)
+	out, err := stsClient.GetCallerIdentity(ctx, &sts.GetCallerIdentityInput{})
+	if err != nil {
+		return identity, fmt.Errorf("get caller identity: %w", err)
+	}
+	identity.AccountID = aws.ToString(out.Account)
+
+	iamClient := iam.NewFromConfig(cfg)
+	aliases, err := iamClient.ListAccountAliases(ctx, &iam.ListAccountAliasesInput{})
+	if err == nil && len(aliases.AccountAliases) > 0 {
+		identity.AccountAlias = aliases.AccountAliases[0]
+	}
+
+	return identity, nil
 }

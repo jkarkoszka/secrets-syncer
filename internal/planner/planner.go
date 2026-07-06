@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"maps"
 	"reflect"
+	"sort"
 
 	"github.com/jkarkoszka/secrets-syncer/internal/provider"
 )
@@ -24,6 +25,7 @@ type Action struct {
 	Type    ActionType
 	Key     string
 	Desired provider.DesiredSecret
+	Changes *ChangeSet
 }
 
 // Conflict is an unmanaged secret that blocks changes.
@@ -44,6 +46,43 @@ type Plan struct {
 	Actions   []Action
 	Conflicts []Conflict
 	Stats     Stats
+}
+
+// ChangeSet describes the planned updates for a secret.
+type ChangeSet struct {
+	Value            bool
+	Description      bool
+	DescriptionOld   string
+	DescriptionNew   string
+	EncryptionKey    bool
+	EncryptionKeyOld string
+	EncryptionKeyNew string
+	Tags             []TagChange
+}
+
+// HasChanges reports whether the change set includes any updates.
+func (c *ChangeSet) HasChanges() bool {
+	if c == nil {
+		return false
+	}
+	return c.Value || c.Description || c.EncryptionKey || len(c.Tags) > 0
+}
+
+// TagChangeType describes the tag mutation kind.
+type TagChangeType string
+
+const (
+	TagAdded   TagChangeType = "added"
+	TagUpdated TagChangeType = "updated"
+	TagRemoved TagChangeType = "removed"
+)
+
+// TagChange captures a single tag change.
+type TagChange struct {
+	Type     TagChangeType
+	Key      string
+	OldValue string
+	NewValue string
 }
 
 // HasChanges reports whether the plan includes create, update, or delete actions.
@@ -94,8 +133,9 @@ func Generate(ctx context.Context, prov provider.SecretProvider, desired []provi
 			return nil, fmt.Errorf("get secret value %s: %w", d.Key, err)
 		}
 
-		if needsUpdate(d, *remote, remoteValue.Value) {
-			plan.addAction(Action{Type: ActionUpdate, Key: d.Key, Desired: d})
+		changeSet := diffSecret(d, *remote, remoteValue.Value)
+		if changeSet.HasChanges() {
+			plan.addAction(Action{Type: ActionUpdate, Key: d.Key, Desired: d, Changes: changeSet})
 		} else {
 			plan.addAction(Action{Type: ActionNoChange, Key: d.Key, Desired: d})
 		}
@@ -132,17 +172,23 @@ func (p *Plan) addAction(action Action) {
 	}
 }
 
-func needsUpdate(desired provider.DesiredSecret, remote provider.RemoteSecret, remoteValue string) bool {
+func diffSecret(desired provider.DesiredSecret, remote provider.RemoteSecret, remoteValue string) *ChangeSet {
+	changeSet := &ChangeSet{}
 	if desired.Value != remoteValue {
-		return true
+		changeSet.Value = true
 	}
 	if desired.Description != remote.Description {
-		return true
+		changeSet.Description = true
+		changeSet.DescriptionOld = remote.Description
+		changeSet.DescriptionNew = desired.Description
 	}
 	if desired.EncryptionKey != "" && desired.EncryptionKey != remote.EncryptionKey {
-		return true
+		changeSet.EncryptionKey = true
+		changeSet.EncryptionKeyOld = remote.EncryptionKey
+		changeSet.EncryptionKeyNew = desired.EncryptionKey
 	}
-	return !tagsEqual(desired.Tags, remote.Tags)
+	changeSet.Tags = diffTags(desired.Tags, remote.Tags)
+	return changeSet
 }
 
 func tagsEqual(desired map[string]string, remote map[string]string) bool {
@@ -158,6 +204,53 @@ func tagsEqual(desired map[string]string, remote map[string]string) bool {
 		return true
 	}
 	return reflect.DeepEqual(desired, filteredRemote)
+}
+
+func diffTags(desired map[string]string, remote map[string]string) []TagChange {
+	filteredRemote := make(map[string]string, len(remote))
+	for k, v := range remote {
+		if k == provider.ManagedTagKey {
+			continue
+		}
+		filteredRemote[k] = v
+	}
+
+	changes := make([]TagChange, 0)
+	seen := make(map[string]struct{}, len(desired))
+	for k, desiredValue := range desired {
+		seen[k] = struct{}{}
+		if remoteValue, ok := filteredRemote[k]; !ok {
+			changes = append(changes, TagChange{
+				Type:     TagAdded,
+				Key:      k,
+				NewValue: desiredValue,
+			})
+		} else if remoteValue != desiredValue {
+			changes = append(changes, TagChange{
+				Type:     TagUpdated,
+				Key:      k,
+				OldValue: remoteValue,
+				NewValue: desiredValue,
+			})
+		}
+	}
+
+	for k, remoteValue := range filteredRemote {
+		if _, ok := seen[k]; ok {
+			continue
+		}
+		changes = append(changes, TagChange{
+			Type:     TagRemoved,
+			Key:      k,
+			OldValue: remoteValue,
+		})
+	}
+
+	sort.Slice(changes, func(i, j int) bool {
+		return changes[i].Key < changes[j].Key
+	})
+
+	return changes
 }
 
 // Apply executes all mutating actions in the plan.

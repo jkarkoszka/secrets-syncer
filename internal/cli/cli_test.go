@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jkarkoszka/secrets-syncer/internal/auth"
 	"github.com/jkarkoszka/secrets-syncer/internal/cli"
 	"github.com/jkarkoszka/secrets-syncer/internal/config"
 	"github.com/jkarkoszka/secrets-syncer/internal/output"
@@ -47,8 +48,8 @@ func TestPlanWithMockProvider(t *testing.T) {
 		Region:    "eu-central-1",
 		NoColor:   true,
 	})
-	cli.SetProviderFactory(func(_ context.Context, _ config.RunConfig) (provider.SecretProvider, error) {
-		return mock, nil
+	cli.SetProviderFactory(func(_ context.Context, _ config.RunConfig) (provider.SecretProvider, *auth.Identity, error) {
+		return mock, nil, nil
 	})
 	t.Cleanup(func() {
 		cli.ResetProviderFactory()
@@ -84,8 +85,8 @@ func TestPlanStdinInput(t *testing.T) {
 		Region:    "eu-central-1",
 		NoColor:   true,
 	})
-	cli.SetProviderFactory(func(_ context.Context, _ config.RunConfig) (provider.SecretProvider, error) {
-		return mock, nil
+	cli.SetProviderFactory(func(_ context.Context, _ config.RunConfig) (provider.SecretProvider, *auth.Identity, error) {
+		return mock, nil, nil
 	})
 	cli.SetStdinReader(bytes.NewReader(inputData))
 	t.Cleanup(func() {
@@ -119,8 +120,8 @@ func TestApplyStdinInputWithTTYConfirmation(t *testing.T) {
 		Region:    "eu-central-1",
 		NoColor:   true,
 	})
-	cli.SetProviderFactory(func(_ context.Context, _ config.RunConfig) (provider.SecretProvider, error) {
-		return mock, nil
+	cli.SetProviderFactory(func(_ context.Context, _ config.RunConfig) (provider.SecretProvider, *auth.Identity, error) {
+		return mock, nil, nil
 	})
 	cli.SetStdinReader(bytes.NewReader(inputData))
 	cli.SetOpenTTY(func(string) (*os.File, error) {
@@ -165,8 +166,8 @@ func TestApplyAutoApprove(t *testing.T) {
 		AutoApprove: true,
 		NoColor:     true,
 	})
-	cli.SetProviderFactory(func(_ context.Context, _ config.RunConfig) (provider.SecretProvider, error) {
-		return mock, nil
+	cli.SetProviderFactory(func(_ context.Context, _ config.RunConfig) (provider.SecretProvider, *auth.Identity, error) {
+		return mock, nil, nil
 	})
 	cli.SetStdinReader(bytes.NewReader(inputData))
 	t.Cleanup(func() {
@@ -205,8 +206,8 @@ func TestSOPSFlagUsesDecryptor(t *testing.T) {
 		NoColor:   true,
 	})
 	cli.SetDecryptor(&mockSOPSDecryptor{out: plaintext})
-	cli.SetProviderFactory(func(_ context.Context, _ config.RunConfig) (provider.SecretProvider, error) {
-		return mock, nil
+	cli.SetProviderFactory(func(_ context.Context, _ config.RunConfig) (provider.SecretProvider, *auth.Identity, error) {
+		return mock, nil, nil
 	})
 	t.Cleanup(func() {
 		cli.ResetDecryptor()
@@ -240,8 +241,8 @@ func TestPlanConflictExit(t *testing.T) {
 		Region:    "eu-central-1",
 		NoColor:   true,
 	})
-	cli.SetProviderFactory(func(_ context.Context, _ config.RunConfig) (provider.SecretProvider, error) {
-		return mock, nil
+	cli.SetProviderFactory(func(_ context.Context, _ config.RunConfig) (provider.SecretProvider, *auth.Identity, error) {
+		return mock, nil, nil
 	})
 	t.Cleanup(func() {
 		cli.ResetProviderFactory()
