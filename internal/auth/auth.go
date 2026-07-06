@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -31,17 +32,18 @@ type Options struct {
 // When --role-arn is set, the role is assumed unless the active credentials are
 // already for that role's account (e.g. after awsume into the target account).
 func LoadConfig(ctx context.Context, opts Options) (aws.Config, error) {
-	if opts.Region == "" {
-		return aws.Config{}, fmt.Errorf("region is required")
+	region, err := resolveRegion(ctx, opts)
+	if err != nil {
+		return aws.Config{}, err
 	}
 
-	creds, source, err := resolveCredentials(ctx, opts)
+	creds, source, err := resolveCredentials(ctx, opts, region)
 	if err != nil {
 		return aws.Config{}, err
 	}
 
 	cfg, err := config.LoadDefaultConfig(ctx,
-		config.WithRegion(opts.Region),
+		config.WithRegion(region),
 		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(
 			creds.AccessKeyID,
 			creds.SecretAccessKey,
@@ -74,20 +76,20 @@ const (
 	sourceDefaultChain
 )
 
-func resolveCredentials(ctx context.Context, opts Options) (sessionCredentials, credentialSource, error) {
-	if creds, ok := credentialsFromEnv(opts.Region); ok {
+func resolveCredentials(ctx context.Context, opts Options, region string) (sessionCredentials, credentialSource, error) {
+	if creds, ok := credentialsFromEnv(region); ok {
 		return creds, sourceEnvironment, nil
 	}
 
 	if opts.Profile != "" {
-		if creds, err := credentialsFromAwsume(ctx, opts.Profile, opts.RoleARN, opts.Region); err == nil {
+		if creds, err := credentialsFromAwsume(ctx, opts.Profile, opts.RoleARN, region); err == nil {
 			return creds, sourceProfileAwsume, nil
 		} else if !isAwsumeMissing(err) {
 			return sessionCredentials{}, 0, err
 		}
 
 		cfg, err := config.LoadDefaultConfig(ctx,
-			config.WithRegion(opts.Region),
+			config.WithRegion(region),
 			config.WithSharedConfigProfile(opts.Profile),
 		)
 		if err != nil {
@@ -101,11 +103,11 @@ func resolveCredentials(ctx context.Context, opts Options) (sessionCredentials, 
 			AccessKeyID:     value.AccessKeyID,
 			SecretAccessKey: value.SecretAccessKey,
 			SessionToken:    value.SessionToken,
-			Region:          opts.Region,
+			Region:          region,
 		}, sourceProfileSDK, nil
 	}
 
-	cfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(opts.Region))
+	cfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(region))
 	if err != nil {
 		return sessionCredentials{}, 0, fmt.Errorf("load default AWS config: %w", err)
 	}
@@ -117,8 +119,35 @@ func resolveCredentials(ctx context.Context, opts Options) (sessionCredentials, 
 		AccessKeyID:     value.AccessKeyID,
 		SecretAccessKey: value.SecretAccessKey,
 		SessionToken:    value.SessionToken,
-		Region:          opts.Region,
+		Region:          region,
 	}, sourceDefaultChain, nil
+}
+
+func resolveRegion(ctx context.Context, opts Options) (string, error) {
+	if opts.Region != "" {
+		return opts.Region, nil
+	}
+
+	envRegion := os.Getenv("AWS_REGION")
+	if envRegion == "" {
+		envRegion = os.Getenv("AWS_DEFAULT_REGION")
+	}
+	if envRegion != "" {
+		return envRegion, nil
+	}
+
+	var cfg aws.Config
+	var err error
+	if opts.Profile != "" {
+		cfg, err = config.LoadDefaultConfig(ctx, config.WithSharedConfigProfile(opts.Profile))
+	} else {
+		cfg, err = config.LoadDefaultConfig(ctx)
+	}
+	if err == nil && cfg.Region != "" {
+		return cfg.Region, nil
+	}
+
+	return "", fmt.Errorf("region is required (set --region, AWS_REGION/AWS_DEFAULT_REGION, or shared config)")
 }
 
 func isAwsumeMissing(err error) bool {
@@ -150,7 +179,7 @@ func withAssumedRole(ctx context.Context, cfg aws.Config, roleARN string) (aws.C
 // ValidateAccountID checks that the active credentials belong to the expected account.
 func ValidateAccountID(ctx context.Context, cfg aws.Config, expectedAccountID string) error {
 	if expectedAccountID == "" {
-		return fmt.Errorf("account-id is required")
+		return nil
 	}
 
 	client := sts.NewFromConfig(cfg)

@@ -172,12 +172,6 @@ var applyCmd = &cobra.Command{
 }
 
 func validateAWSFlags(providerName string) error {
-	if runConfig.Region == "" {
-		return fmt.Errorf("region is required")
-	}
-	if runConfig.AccountID == "" {
-		return fmt.Errorf("account-id is required")
-	}
 	if providerName != provider.ProviderAWS {
 		return fmt.Errorf("unsupported provider %q", providerName)
 	}

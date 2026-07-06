@@ -62,6 +62,24 @@ The binary is written to `./bin/secrets-syncer`.
 
 ## Examples
 
+### Minimal plan
+
+```bash
+secrets-syncer plan --input secrets.yaml
+```
+
+### Minimal stdin plan
+
+```bash
+printf '%s\n' \
+  'version: 1' \
+  'provider: aws-secretsmanager' \
+  'secrets:' \
+  '  - key: /example' \
+  '    value: example-secret-value' \
+  | secrets-syncer plan --input -
+```
+
 ### Plan with profile and role
 
 ```bash
@@ -200,7 +218,9 @@ Credential resolution order:
 Then:
 
 - Assume `--role-arn` when provided and not already in the target account.
-- Validate `--account-id` against `sts:GetCallerIdentity`.
+- Validate `--account-id` against `sts:GetCallerIdentity` when provided.
+
+`--profile`, `--region`, `--role-arn`, and `--account-id` are optional. If `--region` is omitted, the AWS SDK uses `AWS_REGION`, `AWS_DEFAULT_REGION`, or the shared config file.
 
 Example (single command, no pre-awsume):
 
