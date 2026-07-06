@@ -47,7 +47,6 @@ var rootCmd = &cobra.Command{
 }
 
 func init() {
-	rootCmd.PersistentFlags().StringVar(&runConfig.Provider, "provider", provider.ProviderAWS, "secret provider")
 	rootCmd.PersistentFlags().StringVar(&runConfig.InputPath, "input", "", "input file path or - for stdin")
 	rootCmd.PersistentFlags().BoolVar(&runConfig.SOPS, "sops", false, "decrypt SOPS-encrypted input during execution")
 	rootCmd.PersistentFlags().BoolVar(&runConfig.NoColor, "no-color", false, "disable colored output")
@@ -80,7 +79,7 @@ var validateCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		if err := input.Validate(doc, runConfig.Provider); err != nil {
+		if err := input.Validate(doc); err != nil {
 			return err
 		}
 		output.NewFormatter().WriteValidateSuccess()
@@ -92,11 +91,15 @@ var planCmd = &cobra.Command{
 	Use:   "plan",
 	Short: "Show planned secret changes",
 	RunE: func(cmd *cobra.Command, _ []string) error {
-		if err := validateAWSFlags(); err != nil {
+		doc, err := loadDocument(cmd.Context())
+		if err != nil {
+			return err
+		}
+		if err := validateAWSFlags(doc.Provider); err != nil {
 			return err
 		}
 
-		plan, err := buildPlan(cmd.Context())
+		plan, err := buildPlan(cmd.Context(), doc)
 		if err != nil {
 			return err
 		}
@@ -115,11 +118,15 @@ var applyCmd = &cobra.Command{
 	Use:   "apply",
 	Short: "Apply secret changes",
 	RunE: func(cmd *cobra.Command, _ []string) error {
-		if err := validateAWSFlags(); err != nil {
+		doc, err := loadDocument(cmd.Context())
+		if err != nil {
+			return err
+		}
+		if err := validateAWSFlags(doc.Provider); err != nil {
 			return err
 		}
 
-		plan, err := buildPlan(cmd.Context())
+		plan, err := buildPlan(cmd.Context(), doc)
 		if err != nil {
 			return err
 		}
@@ -164,15 +171,15 @@ var applyCmd = &cobra.Command{
 	},
 }
 
-func validateAWSFlags() error {
+func validateAWSFlags(providerName string) error {
 	if runConfig.Region == "" {
 		return fmt.Errorf("region is required")
 	}
 	if runConfig.AccountID == "" {
 		return fmt.Errorf("account-id is required")
 	}
-	if runConfig.Provider != provider.ProviderAWS {
-		return fmt.Errorf("unsupported provider %q", runConfig.Provider)
+	if providerName != provider.ProviderAWS {
+		return fmt.Errorf("unsupported provider %q", providerName)
 	}
 	return nil
 }
@@ -212,12 +219,8 @@ func readInputBytes(ctx context.Context) ([]byte, error) {
 	return input.ReadBytes(runConfig.InputPath)
 }
 
-func buildPlan(ctx context.Context) (*planner.Plan, error) {
-	doc, err := loadDocument(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if err := input.Validate(doc, runConfig.Provider); err != nil {
+func buildPlan(ctx context.Context, doc *input.Document) (*planner.Plan, error) {
+	if err := input.Validate(doc); err != nil {
 		return nil, err
 	}
 

@@ -18,7 +18,6 @@ import (
 func TestValidateCommand(t *testing.T) {
 	path := filepath.Join("..", "..", "testdata", "secrets.yaml")
 	cli.SetRunConfig(config.RunConfig{
-		Provider:  provider.ProviderAWS,
 		InputPath: path,
 	})
 	t.Cleanup(cli.ResetRunConfig)
@@ -43,7 +42,6 @@ func TestPlanWithMockProvider(t *testing.T) {
 	mock := testutil.NewMockProvider()
 
 	cli.SetRunConfig(config.RunConfig{
-		Provider:  provider.ProviderAWS,
 		InputPath: path,
 		AccountID: "000000000000",
 		Region:    "eu-central-1",
@@ -81,7 +79,6 @@ func TestPlanStdinInput(t *testing.T) {
 	inputData := []byte("version: 1\nprovider: aws-secretsmanager\nsecrets:\n  - key: /stdin\n    value: stdin-secret-value\n")
 
 	cli.SetRunConfig(config.RunConfig{
-		Provider:  provider.ProviderAWS,
 		InputPath: "-",
 		AccountID: "000000000000",
 		Region:    "eu-central-1",
@@ -117,7 +114,6 @@ func TestApplyStdinInputWithTTYConfirmation(t *testing.T) {
 	inputData := []byte("version: 1\nprovider: aws-secretsmanager\nsecrets:\n  - key: /stdin-apply\n    value: apply-secret-value\n")
 
 	cli.SetRunConfig(config.RunConfig{
-		Provider:  provider.ProviderAWS,
 		InputPath: "-",
 		AccountID: "000000000000",
 		Region:    "eu-central-1",
@@ -163,7 +159,6 @@ func TestApplyAutoApprove(t *testing.T) {
 	inputData := []byte("version: 1\nprovider: aws-secretsmanager\nsecrets:\n  - key: /apply\n    value: apply-secret-value\n")
 
 	cli.SetRunConfig(config.RunConfig{
-		Provider:    provider.ProviderAWS,
 		InputPath:   "-",
 		AccountID:   "000000000000",
 		Region:      "eu-central-1",
@@ -203,7 +198,6 @@ func TestSOPSFlagUsesDecryptor(t *testing.T) {
 	plaintext := []byte("version: 1\nprovider: aws-secretsmanager\nsecrets:\n  - key: /sops\n    value: sops-secret-value\n")
 
 	cli.SetRunConfig(config.RunConfig{
-		Provider:  provider.ProviderAWS,
 		InputPath: "secrets.enc.yaml",
 		SOPS:      true,
 		AccountID: "000000000000",
@@ -241,7 +235,6 @@ func TestPlanConflictExit(t *testing.T) {
 
 	path := filepath.Join("..", "..", "testdata", "secrets.yaml")
 	cli.SetRunConfig(config.RunConfig{
-		Provider:  provider.ProviderAWS,
 		InputPath: path,
 		AccountID: "000000000000",
 		Region:    "eu-central-1",

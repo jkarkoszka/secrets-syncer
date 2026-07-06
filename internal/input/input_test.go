@@ -97,21 +97,12 @@ func TestValidateErrors(t *testing.T) {
 			},
 			err: "duplicate secret key",
 		},
-		{
-			name: "provider mismatch",
-			doc: input.Document{
-				Version:  1,
-				Provider: "vault",
-				Secrets:  []input.SecretEntry{{Key: "/a", Value: "1"}},
-			},
-			err: "does not match",
-		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			err := input.Validate(&tc.doc, provider.ProviderAWS)
+			err := input.Validate(&tc.doc)
 			if err == nil {
 				t.Fatal("expected error")
 			}
@@ -130,7 +121,7 @@ func TestReadFromFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := input.Validate(doc, provider.ProviderAWS); err != nil {
+	if err := input.Validate(doc); err != nil {
 		t.Fatal(err)
 	}
 }

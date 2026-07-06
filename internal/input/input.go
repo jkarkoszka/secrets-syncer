@@ -70,8 +70,8 @@ func Parse(data []byte, pathHint string) (*Document, error) {
 	return &doc, nil
 }
 
-// Validate checks the document against CLI provider and schema rules.
-func Validate(doc *Document, cliProvider string) error {
+// Validate checks the document against schema rules.
+func Validate(doc *Document) error {
 	if doc == nil {
 		return fmt.Errorf("input document is nil")
 	}
@@ -80,9 +80,6 @@ func Validate(doc *Document, cliProvider string) error {
 	}
 	if doc.Provider == "" {
 		return fmt.Errorf("input provider is required")
-	}
-	if doc.Provider != cliProvider {
-		return fmt.Errorf("input provider %q does not match --provider %q", doc.Provider, cliProvider)
 	}
 	if len(doc.Secrets) == 0 {
 		return fmt.Errorf("input must contain at least one secret")

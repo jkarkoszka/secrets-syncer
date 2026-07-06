@@ -66,7 +66,6 @@ The binary is written to `./bin/secrets-syncer`.
 
 ```bash
 secrets-syncer plan \
-  --provider aws-secretsmanager \
   --account-id 000000000000 \
   --region eu-central-1 \
   --profile my-iam-user-profile \
@@ -78,7 +77,6 @@ secrets-syncer plan \
 
 ```bash
 secrets-syncer plan \
-  --provider aws-secretsmanager \
   --account-id 000000000000 \
   --region eu-central-1 \
   --role-arn arn:aws:iam::000000000000:role/example-deployment-role \
@@ -89,7 +87,6 @@ secrets-syncer plan \
 
 ```bash
 cat secrets.yaml | secrets-syncer plan \
-  --provider aws-secretsmanager \
   --account-id 000000000000 \
   --region eu-central-1 \
   --role-arn arn:aws:iam::000000000000:role/example-deployment-role \
@@ -100,7 +97,6 @@ cat secrets.yaml | secrets-syncer plan \
 
 ```bash
 sops -d secrets.enc.yaml | secrets-syncer plan \
-  --provider aws-secretsmanager \
   --account-id 000000000000 \
   --region eu-central-1 \
   --role-arn arn:aws:iam::000000000000:role/example-deployment-role \
@@ -111,7 +107,6 @@ sops -d secrets.enc.yaml | secrets-syncer plan \
 
 ```bash
 secrets-syncer plan \
-  --provider aws-secretsmanager \
   --account-id 000000000000 \
   --region eu-central-1 \
   --role-arn arn:aws:iam::000000000000:role/example-deployment-role \
@@ -123,7 +118,6 @@ secrets-syncer plan \
 
 ```bash
 sops -d secrets.enc.yaml | secrets-syncer apply \
-  --provider aws-secretsmanager \
   --account-id 000000000000 \
   --region eu-central-1 \
   --role-arn arn:aws:iam::000000000000:role/example-deployment-role \
@@ -133,7 +127,7 @@ sops -d secrets.enc.yaml | secrets-syncer apply \
 
 ## Input format
 
-YAML or JSON with `version: 1`, `provider: aws-secretsmanager`, and a `secrets` list.
+YAML or JSON with `version: 1`, `provider: aws-secretsmanager`, and a `secrets` list. The provider is read from the input file; there is no CLI flag for it.
 
 ```yaml
 version: 1
@@ -164,7 +158,7 @@ before_hook "secrets_syncer_plan" {
   execute = [
     "bash",
     "-c",
-    "sops -d secrets.enc.yaml | secrets-syncer plan --provider aws-secretsmanager --account-id ${local.account_id} --region ${local.region} --role-arn ${local.role_arn} --input -"
+    "sops -d secrets.enc.yaml | secrets-syncer plan --account-id ${local.account_id} --region ${local.region} --role-arn ${local.role_arn} --input -"
   ]
 }
 
@@ -173,7 +167,7 @@ before_hook "secrets_syncer_apply" {
   execute = [
     "bash",
     "-c",
-    "sops -d secrets.enc.yaml | secrets-syncer apply --provider aws-secretsmanager --account-id ${local.account_id} --region ${local.region} --role-arn ${local.role_arn} --input - --auto-approve"
+    "sops -d secrets.enc.yaml | secrets-syncer apply --account-id ${local.account_id} --region ${local.region} --role-arn ${local.role_arn} --input - --auto-approve"
   ]
 }
 ```
@@ -212,7 +206,6 @@ Example (single command, no pre-awsume):
 
 ```bash
 secrets-syncer plan \
-  --provider aws-secretsmanager \
   --account-id 000000000000 \
   --region eu-central-1 \
   --profile example-source-profile \
