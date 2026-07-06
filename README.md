@@ -19,7 +19,7 @@ GitOps-style CLI for managing secret **values** in AWS Secrets Manager without s
 ### Go install (recommended)
 
 ```bash
-go install github.com/jkarkoszka/secrets-syncer@latest
+go install github.com/jkarkoszka/secrets-syncer/cmd/secrets-syncer@latest
 ```
 
 ### GitHub Releases
