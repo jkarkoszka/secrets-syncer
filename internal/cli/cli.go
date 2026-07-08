@@ -52,7 +52,7 @@ var rootCmd = &cobra.Command{
 func init() {
 	rootCmd.PersistentFlags().StringVar(&runConfig.InputPath, "input", "", "input file path or - for stdin")
 	rootCmd.PersistentFlags().StringVar(&runConfig.InputEnv, "input-env", "", "read input from environment variable")
-	rootCmd.PersistentFlags().BoolVar(&runConfig.InputEnvB64, "input-env-base64", false, "decode base64 input from environment variable")
+	rootCmd.PersistentFlags().BoolVar(&runConfig.InputB64, "input-base64", false, "decode base64 input from --input or --input-env")
 	rootCmd.PersistentFlags().BoolVar(&runConfig.SOPS, "sops", false, "decrypt SOPS-encrypted input during execution")
 	rootCmd.PersistentFlags().BoolVar(&runConfig.NoColor, "no-color", false, "disable colored output")
 
@@ -204,8 +204,13 @@ func loadDocument(ctx context.Context) (*input.Document, error) {
 }
 
 func readInputBytes(ctx context.Context) (string, []byte, error) {
-	if runConfig.InputEnvB64 && runConfig.InputEnv == "" {
-		return "", nil, fmt.Errorf("--input-env-base64 requires --input-env")
+	if runConfig.InputB64 && runConfig.InputPath == "" {
+		if runConfig.InputEnv == "" {
+			return "", nil, fmt.Errorf("--input-base64 requires --input or --input-env")
+		}
+	}
+	if runConfig.InputB64 && runConfig.SOPS {
+		return "", nil, fmt.Errorf("--input-base64 is not supported with --sops")
 	}
 	if runConfig.InputEnv != "" {
 		if runConfig.SOPS {
@@ -216,7 +221,7 @@ func readInputBytes(ctx context.Context) (string, []byte, error) {
 			return "", nil, fmt.Errorf("input environment variable %s is empty", runConfig.InputEnv)
 		}
 		data := []byte(value)
-		if runConfig.InputEnvB64 {
+		if runConfig.InputB64 {
 			decoded, err := base64.StdEncoding.DecodeString(strings.TrimSpace(value))
 			if err != nil {
 				return "", nil, fmt.Errorf("decode base64 input: %w", err)
@@ -241,6 +246,13 @@ func readInputBytes(ctx context.Context) (string, []byte, error) {
 				return "", nil, err
 			}
 		}
+		if runConfig.InputB64 {
+			decoded, err := base64.StdEncoding.DecodeString(strings.TrimSpace(string(data)))
+			if err != nil {
+				return "", nil, fmt.Errorf("decode base64 input: %w", err)
+			}
+			data = decoded
+		}
 		return "-", data, nil
 	}
 
@@ -249,7 +261,17 @@ func readInputBytes(ctx context.Context) (string, []byte, error) {
 		return runConfig.InputPath, data, err
 	}
 	data, err := input.ReadBytes(runConfig.InputPath)
-	return runConfig.InputPath, data, err
+	if err != nil {
+		return "", nil, err
+	}
+	if runConfig.InputB64 {
+		decoded, err := base64.StdEncoding.DecodeString(strings.TrimSpace(string(data)))
+		if err != nil {
+			return "", nil, fmt.Errorf("decode base64 input: %w", err)
+		}
+		data = decoded
+	}
+	return runConfig.InputPath, data, nil
 }
 
 func buildPlan(ctx context.Context, doc *input.Document, prov provider.SecretProvider) (*planner.Plan, error) {

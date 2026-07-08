@@ -91,7 +91,15 @@ SECRETS_SYNCER_INPUT='{"version":1,"provider":"aws-secretsmanager","secrets":[{"
 
 ```bash
 SECRETS_SYNCER_INPUT_B64="$(printf '%s' '{"version":1,"provider":"aws-secretsmanager","secrets":[{"key":"/example","value":"example-secret-value"}]}' | base64)" \
-  secrets-syncer plan --input-env SECRETS_SYNCER_INPUT_B64 --input-env-base64
+  secrets-syncer plan --input-env SECRETS_SYNCER_INPUT_B64 --input-base64
+```
+
+### Input via stdin (base64)
+
+```bash
+printf '%s' '{"version":1,"provider":"aws-secretsmanager","secrets":[{"key":"/example","value":"example-secret-value"}]}' \
+  | base64 \
+  | secrets-syncer plan --input - --input-base64
 ```
 
 ### Minimal stdin plan with tags
@@ -262,7 +270,7 @@ secrets-syncer plan \
   --input secrets.yaml
 ```
 
-**MFA and stdin:** When using `--input -`, secret input is read from stdin. The apply confirmation prompt uses `/dev/tty` so you can still type `yes` after piping or heredoc input. Use `--auto-approve` for non-interactive runs (e.g. Terragrunt hooks). You can also use `--input-env ENV_VAR` to read JSON from an environment variable (add `--input-env-base64` if the env value is base64 encoded).
+**MFA and stdin:** When using `--input -`, secret input is read from stdin. The apply confirmation prompt uses `/dev/tty` so you can still type `yes` after piping or heredoc input. Use `--auto-approve` for non-interactive runs (e.g. Terragrunt hooks). You can also use `--input-env ENV_VAR` to read JSON from an environment variable; add `--input-base64` if the env or stdin value is base64 encoded.
 
 ## Safety
 

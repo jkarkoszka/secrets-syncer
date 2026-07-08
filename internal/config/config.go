@@ -8,7 +8,7 @@ type RunConfig struct {
 	RoleARN     string
 	InputPath   string
 	InputEnv    string
-	InputEnvB64 bool
+	InputB64    bool
 	SOPS        bool
 	Prune       bool
 	AutoApprove bool
