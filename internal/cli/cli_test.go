@@ -3,6 +3,7 @@ package cli_test
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"os"
 	"path/filepath"
 	"strings"
@@ -120,6 +121,41 @@ func TestPlanInputEnv(t *testing.T) {
 		AccountID: "000000000000",
 		Region:    "eu-central-1",
 		NoColor:   true,
+	})
+	cli.SetProviderFactory(func(_ context.Context, _ config.RunConfig) (provider.SecretProvider, *auth.Identity, error) {
+		return mock, nil, nil
+	})
+	t.Cleanup(func() {
+		cli.ResetProviderFactory()
+		cli.ResetRunConfig()
+	})
+
+	buf := &bytes.Buffer{}
+	output.SetWriter(buf)
+	t.Cleanup(output.ResetWriter)
+
+	root := cli.RootCommand()
+	root.SetArgs([]string{"plan"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(buf.String(), "Plan: 1 to add") {
+		t.Fatalf("output = %q", buf.String())
+	}
+}
+
+func TestPlanInputEnvBase64(t *testing.T) {
+	mock := testutil.NewMockProvider()
+	inputData := `{"version":1,"provider":"aws-secretsmanager","secrets":[{"key":"/env-b64","value":"env-secret"}]}`
+
+	t.Setenv("SECRETS_SYNCER_INPUT_B64", base64.StdEncoding.EncodeToString([]byte(inputData)))
+	cli.SetRunConfig(config.RunConfig{
+		InputEnv:    "SECRETS_SYNCER_INPUT_B64",
+		InputEnvB64: true,
+		AccountID:   "000000000000",
+		Region:      "eu-central-1",
+		NoColor:     true,
 	})
 	cli.SetProviderFactory(func(_ context.Context, _ config.RunConfig) (provider.SecretProvider, *auth.Identity, error) {
 		return mock, nil, nil
