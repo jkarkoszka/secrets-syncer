@@ -18,9 +18,9 @@ const supportedVersion = 1
 
 // Document is the top-level input schema.
 type Document struct {
-	Version  int             `json:"version" yaml:"version"`
-	Provider string          `json:"provider" yaml:"provider"`
-	Secrets  []SecretEntry   `json:"secrets" yaml:"secrets"`
+	Version  int           `json:"version" yaml:"version"`
+	Provider string        `json:"provider" yaml:"provider"`
+	Secrets  []SecretEntry `json:"secrets" yaml:"secrets"`
 }
 
 // SecretEntry is a single secret in the input document.
@@ -81,10 +81,6 @@ func Validate(doc *Document) error {
 	if doc.Provider == "" {
 		return fmt.Errorf("input provider is required")
 	}
-	if len(doc.Secrets) == 0 {
-		return fmt.Errorf("input must contain at least one secret")
-	}
-
 	seen := make(map[string]struct{}, len(doc.Secrets))
 	for i, secret := range doc.Secrets {
 		if strings.TrimSpace(secret.Key) == "" {

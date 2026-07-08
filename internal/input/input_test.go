@@ -126,6 +126,19 @@ func TestReadFromFile(t *testing.T) {
 	}
 }
 
+func TestValidateAllowsEmptySecrets(t *testing.T) {
+	t.Parallel()
+
+	doc := &input.Document{
+		Version:  1,
+		Provider: provider.ProviderAWS,
+		Secrets:  []input.SecretEntry{},
+	}
+	if err := input.Validate(doc); err != nil {
+		t.Fatalf("error = %q", err.Error())
+	}
+}
+
 func TestToDesired(t *testing.T) {
 	t.Parallel()
 

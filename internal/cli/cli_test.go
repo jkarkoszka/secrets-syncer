@@ -110,6 +110,40 @@ func TestPlanStdinInput(t *testing.T) {
 	}
 }
 
+func TestPlanInputEnv(t *testing.T) {
+	mock := testutil.NewMockProvider()
+	inputData := `{"version":1,"provider":"aws-secretsmanager","secrets":[{"key":"/env","value":"env-secret"}]}`
+
+	t.Setenv("SECRETS_SYNCER_INPUT", inputData)
+	cli.SetRunConfig(config.RunConfig{
+		InputEnv:  "SECRETS_SYNCER_INPUT",
+		AccountID: "000000000000",
+		Region:    "eu-central-1",
+		NoColor:   true,
+	})
+	cli.SetProviderFactory(func(_ context.Context, _ config.RunConfig) (provider.SecretProvider, *auth.Identity, error) {
+		return mock, nil, nil
+	})
+	t.Cleanup(func() {
+		cli.ResetProviderFactory()
+		cli.ResetRunConfig()
+	})
+
+	buf := &bytes.Buffer{}
+	output.SetWriter(buf)
+	t.Cleanup(output.ResetWriter)
+
+	root := cli.RootCommand()
+	root.SetArgs([]string{"plan"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(buf.String(), "Plan: 1 to add") {
+		t.Fatalf("output = %q", buf.String())
+	}
+}
+
 func TestApplyStdinInputWithTTYConfirmation(t *testing.T) {
 	mock := testutil.NewMockProvider()
 	inputData := []byte("version: 1\nprovider: aws-secretsmanager\nsecrets:\n  - key: /stdin-apply\n    value: apply-secret-value\n")
@@ -261,6 +295,43 @@ func TestPlanConflictExit(t *testing.T) {
 		t.Fatal("expected conflict error")
 	}
 	if !strings.Contains(buf.String(), "not managed by secrets-syncer") {
+		t.Fatalf("output = %q", buf.String())
+	}
+}
+
+func TestPlanEmptyWithPrune(t *testing.T) {
+	mock := testutil.NewMockProvider()
+	mock.Seed("/managed/delete", "v", "", "", nil, true)
+
+	inputData := []byte("version: 1\nprovider: aws-secretsmanager\nsecrets: []\n")
+	cli.SetRunConfig(config.RunConfig{
+		InputPath: "-",
+		AccountID: "000000000000",
+		Region:    "eu-central-1",
+		NoColor:   true,
+		Prune:     true,
+	})
+	cli.SetProviderFactory(func(_ context.Context, _ config.RunConfig) (provider.SecretProvider, *auth.Identity, error) {
+		return mock, nil, nil
+	})
+	cli.SetStdinReader(bytes.NewReader(inputData))
+	t.Cleanup(func() {
+		cli.ResetProviderFactory()
+		cli.ResetStdinReader()
+		cli.ResetRunConfig()
+	})
+
+	buf := &bytes.Buffer{}
+	output.SetWriter(buf)
+	t.Cleanup(output.ResetWriter)
+
+	root := cli.RootCommand()
+	root.SetArgs([]string{"plan", "--prune"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(buf.String(), "destroy /managed/delete") {
 		t.Fatalf("output = %q", buf.String())
 	}
 }

@@ -50,6 +50,7 @@ var rootCmd = &cobra.Command{
 
 func init() {
 	rootCmd.PersistentFlags().StringVar(&runConfig.InputPath, "input", "", "input file path or - for stdin")
+	rootCmd.PersistentFlags().StringVar(&runConfig.InputEnv, "input-env", "", "read input from environment variable")
 	rootCmd.PersistentFlags().BoolVar(&runConfig.SOPS, "sops", false, "decrypt SOPS-encrypted input during execution")
 	rootCmd.PersistentFlags().BoolVar(&runConfig.NoColor, "no-color", false, "disable colored output")
 
@@ -81,7 +82,7 @@ var validateCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		if err := input.Validate(doc); err != nil {
+		if err := validateInput(doc, false); err != nil {
 			return err
 		}
 		output.NewFormatter().WriteValidateSuccess()
@@ -188,47 +189,73 @@ func validateAWSFlags(providerName string) error {
 }
 
 func loadDocument(ctx context.Context) (*input.Document, error) {
-	if runConfig.InputPath == "" {
-		return nil, fmt.Errorf("input is required")
-	}
-
-	data, err := readInputBytes(ctx)
+	pathHint, data, err := readInputBytes(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	doc, err := input.Parse(data, runConfig.InputPath)
+	doc, err := input.Parse(data, pathHint)
 	if err != nil {
 		return nil, err
 	}
 	return doc, nil
 }
 
-func readInputBytes(ctx context.Context) ([]byte, error) {
+func readInputBytes(ctx context.Context) (string, []byte, error) {
+	if runConfig.InputEnv != "" {
+		if runConfig.SOPS {
+			return "", nil, fmt.Errorf("--sops is not supported with --input-env")
+		}
+		value := os.Getenv(runConfig.InputEnv)
+		if value == "" {
+			return "", nil, fmt.Errorf("input environment variable %s is empty", runConfig.InputEnv)
+		}
+		return "env", []byte(value), nil
+	}
+
+	if runConfig.InputPath == "" {
+		return "", nil, fmt.Errorf("input is required")
+	}
+
 	if runConfig.InputPath == "-" {
 		data, err := io.ReadAll(stdinReader)
 		if err != nil {
-			return nil, fmt.Errorf("read stdin: %w", err)
+			return "", nil, fmt.Errorf("read stdin: %w", err)
 		}
 		if runConfig.SOPS {
-			return decryptor.Decrypt(ctx, "-", data)
+			data, err = decryptor.Decrypt(ctx, "-", data)
+			if err != nil {
+				return "", nil, err
+			}
 		}
-		return data, nil
+		return "-", data, nil
 	}
 
 	if runConfig.SOPS {
-		return decryptor.Decrypt(ctx, runConfig.InputPath, nil)
+		data, err := decryptor.Decrypt(ctx, runConfig.InputPath, nil)
+		return runConfig.InputPath, data, err
 	}
-	return input.ReadBytes(runConfig.InputPath)
+	data, err := input.ReadBytes(runConfig.InputPath)
+	return runConfig.InputPath, data, err
 }
 
 func buildPlan(ctx context.Context, doc *input.Document, prov provider.SecretProvider) (*planner.Plan, error) {
-	if err := input.Validate(doc); err != nil {
+	if err := validateInput(doc, runConfig.Prune); err != nil {
 		return nil, err
 	}
 
 	desired := input.ToDesired(doc)
 	return planner.Generate(ctx, prov, desired, planner.Options{Prune: runConfig.Prune})
+}
+
+func validateInput(doc *input.Document, allowEmpty bool) error {
+	if err := input.Validate(doc); err != nil {
+		return err
+	}
+	if !allowEmpty && len(doc.Secrets) == 0 {
+		return fmt.Errorf("input must contain at least one secret (or use --prune to delete managed secrets)")
+	}
+	return nil
 }
 
 func defaultProviderFactory(ctx context.Context, cfg config.RunConfig) (provider.SecretProvider, *auth.Identity, error) {

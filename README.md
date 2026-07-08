@@ -80,6 +80,28 @@ printf '%s\n' \
   | secrets-syncer plan --input -
 ```
 
+### Input via environment variable
+
+```bash
+SECRETS_SYNCER_INPUT='{"version":1,"provider":"aws-secretsmanager","secrets":[{"key":"/example","value":"example-secret-value"}]}' \
+  secrets-syncer plan --input-env SECRETS_SYNCER_INPUT
+```
+
+### Minimal stdin plan with tags
+
+```bash
+printf '%s\n' \
+  'version: 1' \
+  'provider: aws-secretsmanager' \
+  'secrets:' \
+  '  - key: /example' \
+  '    value: example-secret-value' \
+  '    tags:' \
+  '      env: dev' \
+  '      owner: platform' \
+  | secrets-syncer plan --input -
+```
+
 ### Plan with profile and role
 
 ```bash
@@ -233,7 +255,7 @@ secrets-syncer plan \
   --input secrets.yaml
 ```
 
-**MFA and stdin:** When using `--input -`, secret input is read from stdin. The apply confirmation prompt uses `/dev/tty` so you can still type `yes` after piping or heredoc input. Use `--auto-approve` for non-interactive runs (e.g. Terragrunt hooks).
+**MFA and stdin:** When using `--input -`, secret input is read from stdin. The apply confirmation prompt uses `/dev/tty` so you can still type `yes` after piping or heredoc input. Use `--auto-approve` for non-interactive runs (e.g. Terragrunt hooks). You can also use `--input-env ENV_VAR` to read JSON from an environment variable.
 
 ## Safety
 
