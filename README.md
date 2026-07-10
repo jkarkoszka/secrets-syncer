@@ -62,6 +62,9 @@ The binary is written to `./bin/secrets-syncer`.
 
 ## Examples
 
+See `examples/terragrunt-local-secrets` for a Terragrunt + local state example
+that uses SOPS with `age` keys (no AWS-specific encryption setup required).
+
 ### Minimal plan
 
 ```bash

@@ -1,0 +1,3 @@
+.secrets/
+global-secrets.yaml
+global-secrets.enc.yaml
